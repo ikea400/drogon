@@ -21,6 +21,7 @@
 #include <thread>
 #include <optional>
 #include <any>
+#include <string_view>
 
 namespace drogon
 {
@@ -31,7 +32,30 @@ namespace drogon
 class Session
 {
   public:
-    using SessionMap = std::map<std::string, std::any>;
+    struct string_compare
+    {
+        using is_transparent = void;
+
+        [[nodiscard]] bool operator()(const char *lhs,
+                                      const char *rhs) const noexcept
+        {
+            return lhs < rhs;
+        }
+
+        [[nodiscard]] bool operator()(std::string_view lhs,
+                                      std::string_view rhs) const noexcept
+        {
+            return lhs < rhs;
+        }
+
+        [[nodiscard]] bool operator()(const std::string &lhs,
+                                      const std::string &rhs) const noexcept
+        {
+            return lhs < rhs;
+        }
+    };
+
+    using SessionMap = std::map<std::string, std::any, string_compare>;
 
     /**
      * @brief Get the data identified by the key parameter.
@@ -42,7 +66,7 @@ class Session
        @endcode
      */
     template <typename T>
-    T get(const std::string &key) const
+    T get(std::string_view key) const
     {
         {
             std::lock_guard<std::mutex> lck(mutex_);
@@ -62,6 +86,7 @@ class Session
         return T();
     }
 
+
     /**
      * @brief Get the data identified by the key parameter and return an
      * optional object that wraps the data.
@@ -71,7 +96,7 @@ class Session
      * @return optional<T>
      */
     template <typename T>
-    std::optional<T> getOptional(const std::string &key) const
+    std::optional<T> getOptional(std::string_view key) const
     {
         {
             std::lock_guard<std::mutex> lck(mutex_);
@@ -105,7 +130,7 @@ class Session
      * The changing of the data is protected by the mutex of the session.
      */
     template <typename T, typename Callable>
-    void modify(const std::string &key, Callable &&handler)
+    void modify(std::string_view key, Callable &&handler)
     {
         std::lock_guard<std::mutex> lck(mutex_);
         auto it = sessionMap_.find(key);
@@ -124,7 +149,7 @@ class Session
         {
             auto item = T();
             handler(item);
-            sessionMap_.insert(std::make_pair(key, std::any(std::move(item))));
+            sessionMap_.insert(std::make_pair(std::string(key), std::any(std::move(item))));
         }
     }
 
@@ -152,10 +177,10 @@ class Session
        @endcode
      * @note If the key already exists, the element is not inserted.
      */
-    void insert(const std::string &key, const std::any &obj)
+    void insert(std::string key, const std::any &obj)
     {
         std::lock_guard<std::mutex> lck(mutex_);
-        sessionMap_.insert(std::make_pair(key, obj));
+        sessionMap_.insert(std::make_pair(std::move(key), obj));
     }
 
     /**
@@ -166,25 +191,28 @@ class Session
        @endcode
      * @note If the key already exists, the element is not inserted.
      */
-    void insert(const std::string &key, std::any &&obj)
+    void insert(std::string key, std::any &&obj)
     {
         std::lock_guard<std::mutex> lck(mutex_);
-        sessionMap_.insert(std::make_pair(key, std::move(obj)));
+        sessionMap_.insert(std::make_pair(std::move(key), std::move(obj)));
     }
 
     /**
      * @brief Erase the data identified by the given key.
      */
-    void erase(const std::string &key)
+    void erase(std::string_view key)
     {
         std::lock_guard<std::mutex> lck(mutex_);
-        sessionMap_.erase(key);
+        if (auto it = sessionMap_.find(key); it != sessionMap_.end())
+        {
+            sessionMap_.erase(it);
+        }
     }
 
     /**
      * @brief Return true if the data identified by the key exists.
      */
-    bool find(const std::string &key)
+    bool find(std::string_view key)
     {
         std::lock_guard<std::mutex> lck(mutex_);
         if (sessionMap_.find(key) == sessionMap_.end())
