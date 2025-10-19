@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <any>
+#include <string_view>
 
 namespace drogon
 {
@@ -37,7 +38,7 @@ class Attributes
        @endcode
      */
     template <typename T>
-    const T &get(const std::string &key) const
+    const T &get(const std::string_view key) const
     {
         static const T nullVal = T();
         auto it = attributesMap_.find(key);
@@ -58,7 +59,7 @@ class Attributes
     /**
      * @brief Get the 'any' object identified by the given key
      */
-    std::any &operator[](const std::string &key)
+    std::any &operator[](const std::string_view key)
     {
         return attributesMap_[key];
     }
@@ -88,9 +89,33 @@ class Attributes
     }
 
     /**
+     * @brief Insert a key-value pair
+     * @note here the any object can be created implicitly. for example
+     * @code
+       attributesPtr->insert("user name", userNameString);
+       @endcode
+     */
+    void insert(std::string&& key, std::any &&obj)
+    {
+        attributesMap_[std::move(key)] = std::move(obj);
+    }
+
+    /**
+     * @brief Insert a key-value pair
+     * @note here the any object can be created implicitly. for example
+     * @code
+       attributesPtr->insert("user name", userNameString);
+       @endcode
+     */
+    void insert(const std::string_view key, std::any &&obj)
+    {
+        attributesMap_[std::string(key)] = std::move(obj);
+    }
+
+    /**
      * @brief Erase the data identified by the given key.
      */
-    void erase(const std::string &key)
+    void erase(const std::string_view key)
     {
         attributesMap_.erase(key);
     }
@@ -98,7 +123,7 @@ class Attributes
     /**
      * @brief Return true if the data identified by the key exists.
      */
-    bool find(const std::string &key)
+    bool find(const std::string_view key)
     {
         if (attributesMap_.find(key) == attributesMap_.end())
         {
@@ -121,7 +146,18 @@ class Attributes
     Attributes() = default;
 
   private:
-    using AttributesMap = std::map<std::string, std::any>;
+    struct string_compare
+    {
+        using is_transparent = void;
+
+        [[nodiscard]] bool operator()(std::string_view lhs,
+                                      std::string_view rhs) const noexcept
+        {
+            return lhs < rhs;
+        }
+    };
+
+    using AttributesMap = std::map<std::string, std::any, string_compare>;
     AttributesMap attributesMap_;
 };
 
